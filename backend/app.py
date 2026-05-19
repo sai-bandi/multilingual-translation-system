@@ -27,7 +27,7 @@ config = Config()
 
 # Initialize Flask app
 app = Flask(__name__)
-CORS(app)  # Enable Cross-Origin Resource Sharing
+CORS(app, resources={r"/*": {"origins": "*"}})  # Allow all web browsers to access endpoints
 
 # Initialize rate limiter
 limiter = Limiter(
