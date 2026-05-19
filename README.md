@@ -45,7 +45,8 @@ cd multilingual-translator
 2. Install dependencies using `requirements.txt` from the backend folder:
    ```bash
    pip install tf-keras --upgrade
-            or
+   pip install flask-cors torch
+               or
    pip install -r requirements.txt
    
    ```
