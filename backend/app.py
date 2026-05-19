@@ -38,8 +38,10 @@ limiter = Limiter(
 
 # Cache for translation models
 @lru_cache(maxsize=5)
-def get_translator(source_lang: str, target_lang: str):
+# Replace your get_translator and translate sections with this:
 
+def get_translation_result(text: str, source_lang: str, target_lang: str) -> str:
+    """Loads the pipeline, translates immediately, and frees memory right after."""
     language_models = {
         ("en", "es"): "Helsinki-NLP/opus-mt-en-es",
         ("en", "fr"): "Helsinki-NLP/opus-mt-en-fr",
@@ -49,47 +51,26 @@ def get_translator(source_lang: str, target_lang: str):
     }
 
     model_name = language_models.get((source_lang, target_lang))
-
     if not model_name:
-        raise ValueError(
-            f"Unsupported language pair: {source_lang}-{target_lang}"
-        )
+        raise ValueError(f"Unsupported language pair: {source_lang}-{target_lang}")
 
-    logger.info(f"Loading model: {model_name}")
-
-    return pipeline("translation", model=model_name)
-
-def validate_input(text: str, source_language: str, target_language: str) -> Optional[Dict]:
-    """
-    Validate input parameters for the translation request.
+    logger.info(f"Loading model on-demand: {model_name}")
     
-    Args:
-        text (str): Text to be translated.
-        source_language (str): Source language code.
-        target_language (str): Target language code.
+    # Initialize pipeline locally so it can be garbage collected
+    translator_pipeline = pipeline("translation", model=model_name)
+    result = translator_pipeline(text, max_length=400)
+    translated_text = result[0]['translation_text']
     
-    Returns:
-        Optional[Dict]: Error message and status code if validation fails, otherwise None.
-    """
-    if not text:
-        return {"error": "No text provided"}, 400
-    if len(text) > config.MAX_TEXT_LENGTH:
-        return {"error": f"Text exceeds maximum length of {config.MAX_TEXT_LENGTH}"}, 400
-    if source_language == target_language:
-        return {"error": "Source and target languages must be different"}, 400
-    return None
+    # Clean up memory explicitly to prevent Render Free Tier crashes
+    del translator_pipeline
+    import gc
+    gc.collect()
+    
+    return translated_text
 
 @app.route('/translate', methods=['POST'])
-@limiter.limit("10 per minute")  # Apply rate limiting to this endpoint
+@limiter.limit("10 per minute")
 def translate():
-    """
-    Handle translation requests.
-    
-    Expects a JSON payload with 'text', 'source_language', and 'target_language'.
-    
-    Returns:
-        JSON response with translated text or error message.
-    """
     try:
         request_data = request.json
         input_text = request_data.get("text", "")
@@ -101,12 +82,8 @@ def translate():
         if validation_error:
             return jsonify(validation_error[0]), validation_error[1]
 
-        # Get cached translator or create new one
-        translator_pipeline = get_translator(source_language, target_language)
-
-        # Perform translation
-        translation_result = translator_pipeline(input_text, max_length=400)
-        translated_text = translation_result[0]['translation_text']
+        # Translate and immediately flush RAM
+        translated_text = get_translation_result(input_text, source_language, target_language)
 
         logger.info(f"Successfully translated text from {source_language} to {target_language}")
         return jsonify({
@@ -121,11 +98,8 @@ def translate():
     except Exception as general_exception:
         import traceback
         traceback.print_exc()
-
         logger.error(f"Translation error: {str(general_exception)}")
-
-        return jsonify({"error": str(general_exception)
-        }), 500
+        return jsonify({"error": str(general_exception)}), 500
 
 if __name__ == '__main__':
     multiprocessing.freeze_support()  # Support for Windows multiprocessing
