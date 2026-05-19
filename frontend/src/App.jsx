@@ -199,7 +199,7 @@ function App() {
 
         try {
             // Make API call to translation endpoint
-            const response = await axios.post("http://127.0.0.1:5000/translate", {
+            const response = await axios.post("http://localhost:5000/translate", {
                 text: inputText,
                 source_language: originalLanguage,
                 target_language: destinationLanguage,
@@ -207,7 +207,10 @@ function App() {
             setTranslationResult(response.data.translated_text || "No translation available.");
         } catch (err) {
             // Handle API errors
-            setErrorMessage(err.response?.data?.message || "Failed to translate text. Please try again.");
+            setErrorMessage(
+    err.response?.data?.error ||
+    "Failed to translate text. Please try again."
+);
         } finally {
             // Reset loading state
             setIsTranslating(false);

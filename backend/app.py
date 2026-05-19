@@ -38,26 +38,25 @@ limiter = Limiter(
 # Cache for translation models
 @lru_cache(maxsize=5)
 def get_translator(source_lang: str, target_lang: str):
-    """
-    Cache and return translation model for a given language pair.
-    
-    Args:
-        source_lang (str): Source language code.
-        target_lang (str): Target language code.
-    
-    Returns:
-        A translation pipeline object.
-    
-    Raises:
-        ValueError: If the model cannot be loaded for the given language pair.
-    """
-    try:
-        model_name = f"{config.MODEL_BASE_PATH}-{source_lang}-{target_lang}"
-        logger.info(f"Loading translation model: {model_name}")
-        return pipeline("translation", model=model_name)
-    except Exception as e:
-        logger.error(f"Error loading model: {str(e)}")
-        raise ValueError(f"Unsupported language pair: {source_lang}-{target_lang}")
+
+    language_models = {
+        ("en", "es"): "Helsinki-NLP/opus-mt-en-es",
+        ("en", "fr"): "Helsinki-NLP/opus-mt-en-fr",
+        ("en", "de"): "Helsinki-NLP/opus-mt-en-de",
+        ("en", "hi"): "Helsinki-NLP/opus-mt-en-hi",
+        ("hi", "en"): "Helsinki-NLP/opus-mt-hi-en",
+    }
+
+    model_name = language_models.get((source_lang, target_lang))
+
+    if not model_name:
+        raise ValueError(
+            f"Unsupported language pair: {source_lang}-{target_lang}"
+        )
+
+    logger.info(f"Loading model: {model_name}")
+
+    return pipeline("translation", model=model_name)
 
 def validate_input(text: str, source_language: str, target_language: str) -> Optional[Dict]:
     """
@@ -119,9 +118,14 @@ def translate():
         logger.error(f"Validation error: {str(validation_exception)}")
         return jsonify({"error": str(validation_exception)}), 400
     except Exception as general_exception:
+        import traceback
+        traceback.print_exc()
+
         logger.error(f"Translation error: {str(general_exception)}")
-        return jsonify({"error": "Internal server error"}), 500
+
+        return jsonify({"error": str(general_exception)
+        }), 500
 
 if __name__ == '__main__':
     multiprocessing.freeze_support()  # Support for Windows multiprocessing
-    app.run(debug=True)  # Run the Flask app in debug mode
+    app.run(host='127.0.0.1', port=5000, debug=False, use_reloader=False)  # Disable debugger reloader on Windows
