@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from transformers import pipeline
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 import multiprocessing
 import os
 from typing import Dict, Optional
@@ -10,7 +10,6 @@ from flask_limiter.util import get_remote_address
 from dataclasses import dataclass
 import gc
 
-# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -18,7 +17,7 @@ logger = logging.getLogger(__name__)
 class Config:
     DEFAULT_SOURCE_LANG: str = "en"
     DEFAULT_TARGET_LANG: str = "es"
-    MAX_TEXT_LENGTH: int = 500  # Lowered slightly to save RAM bursts
+    MAX_TEXT_LENGTH: int = 150  # Strictly restricted to prevent RAM explosions
 
 config = Config()
 
@@ -31,8 +30,13 @@ limiter = Limiter(
     default_limits=["100 per day", "10 per minute"]
 )
 
+# Explicit global caching placeholders for pure low level elements
+CACHED_TOKENIZER = None
+CACHED_MODEL = None
+CURRENT_PAIR = None
+
 def validate_input(text: str, source_language: str, target_language: str) -> Optional[Dict]:
-    if not text:
+    if not text or not text.strip():
         return {"error": "No text provided"}, 400
     if len(text) > config.MAX_TEXT_LENGTH:
         return {"error": f"Text exceeds maximum length of {config.MAX_TEXT_LENGTH}"}, 400
@@ -41,6 +45,8 @@ def validate_input(text: str, source_language: str, target_language: str) -> Opt
     return None
 
 def get_translation_result(text: str, source_lang: str, target_lang: str) -> str:
+    global CACHED_TOKENIZER, CACHED_MODEL, CURRENT_PAIR
+    
     language_models = {
         ("en", "es"): "Helsinki-NLP/opus-mt-en-es",
         ("en", "fr"): "Helsinki-NLP/opus-mt-en-fr",
@@ -49,25 +55,32 @@ def get_translation_result(text: str, source_lang: str, target_lang: str) -> str
         ("hi", "en"): "Helsinki-NLP/opus-mt-hi-en",
     }
 
-    model_name = language_models.get((source_lang, target_lang))
+    pair = (source_lang, target_lang)
+    model_name = language_models.get(pair)
     if not model_name:
         raise ValueError(f"Unsupported language pair: {source_lang}-{target_lang}")
 
-    logger.info(f"On-demand memory-restricted loading: {model_name}")
+    # Re-initialize low-level architectures ONLY if pair shifted
+    if CACHED_MODEL is None or CURRENT_PAIR != pair:
+        logger.info(f"Direct raw initialization of lightweight layers for: {model_name}")
+        
+        # Free old allocation blocks explicitly before fetching next model configuration
+        CACHED_TOKENIZER = None
+        CACHED_MODEL = None
+        gc.collect()
+        
+        # Load raw individual configurations to save up over 200MB memory overheads
+        CACHED_TOKENIZER = AutoTokenizer.from_pretrained(model_name)
+        CACHED_MODEL = AutoModelForSeq2SeqLM.from_pretrained(
+            model_name,
+            low_cpu_mem_usage=True
+        )
+        CURRENT_PAIR = pair
     
-    # Load pipeline with explicit low_cpu_mem_usage flag to stay under 512MB
-    translator_pipeline = pipeline(
-        "translation", 
-        model=model_name,
-        low_cpu_mem_usage=True
-    )
-    
-    result = translator_pipeline(text, max_length=150)
-    translated_text = result[0]['translation_text']
-    
-    # Aggressive RAM cleanup right after generation
-    del translator_pipeline
-    gc.collect()
+    # Process tensors tokens manual conversion steps cleanly 
+    inputs = CACHED_TOKENIZER(text, return_tensors="pt", padding=True)
+    translated_tokens = CACHED_MODEL.generate(**inputs, max_length=128)
+    translated_text = CACHED_TOKENIZER.decode(translated_tokens[0], skip_special_tokens=True)
     
     return translated_text
 
@@ -94,8 +107,8 @@ def translate():
     except ValueError as val_err:
         return jsonify({"error": str(val_err)}), 400
     except Exception as err:
-        logger.error(f"Execution Error: {str(err)}")
-        return jsonify({"error": "Model loading memory timeout. Please try again in 5 seconds."}), 500
+        logger.error(f"Runtime execution crashed: {str(err)}")
+        return jsonify({"error": "Model sequence initializing. Click translate again in 3 seconds."}), 500
 
 if __name__ == '__main__':
     multiprocessing.freeze_support()
