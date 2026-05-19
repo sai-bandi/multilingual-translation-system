@@ -1,11 +1,9 @@
 /**
  * Multilingual Translator Application
- * 
- * This React application provides a user interface for translating text between different languages.
+ * * This React application provides a user interface for translating text between different languages.
  * It communicates with a backend API endpoint to perform the translations and handles various
  * states including loading, errors, and successful translations.
- * 
- * @module App
+ * * @module App
  * @requires React
  * @requires axios
  * @requires PropTypes
@@ -85,8 +83,7 @@ const styles = {
 /**
  * TranslationInput Component
  * Renders a textarea for users to input text for translation
- * 
- * @component
+ * * @component
  * @param {Object} props - Component props
  * @param {string} props.value - The current input text value
  * @param {function} props.onChange - Handler for input changes
@@ -105,8 +102,7 @@ const TranslationInput = ({ value, onChange, placeholder }) => (
 /**
  * LanguageInput Component
  * Renders an input field for language selection with a label
- * 
- * @component
+ * * @component
  * @param {Object} props - Component props
  * @param {string} props.label - Label text for the input
  * @param {string} props.value - Current language code value
@@ -164,8 +160,7 @@ const TranslatedOutput = ({ text }) => (
 /**
  * Main Application Component
  * Manages the translation interface and handles API communication
- * 
- * @component
+ * * @component
  * @returns {React.Element} The rendered application
  */
 function App() {
@@ -180,8 +175,7 @@ function App() {
     /**
      * Handles the translation submission process
      * Validates input, makes API call, and updates state accordingly
-     * 
-     * @async
+     * * @async
      * @function handleTranslationSubmit
      * @returns {Promise<void>}
      */
@@ -198,8 +192,8 @@ function App() {
         setIsTranslating(true);
 
         try {
-            // Make API call to translation endpoint
-            const response = await axios.post("http://localhost:5000/translate", {
+            // Make API call to the live hosted translation endpoint on Render
+            const response = await axios.post("https://multilingual-translation-system.onrender.com/translate", {
                 text: inputText,
                 source_language: originalLanguage,
                 target_language: destinationLanguage,
@@ -208,9 +202,9 @@ function App() {
         } catch (err) {
             // Handle API errors
             setErrorMessage(
-    err.response?.data?.error ||
-    "Failed to translate text. Please try again."
-);
+                err.response?.data?.error ||
+                "Failed to translate text. Please try again."
+            );
         } finally {
             // Reset loading state
             setIsTranslating(false);
