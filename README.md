@@ -37,19 +37,23 @@ cd multilingual-translator
 ### 2. Backend Setup
 1. Create and activate a virtual environment:
    ```bash
-   python3.12 -m venv venv
+   python -m venv venv
    source venv/bin/activate  # Linux/Mac
    venv\Scripts\activate     # Windows
    ```
 
 2. Install dependencies using `requirements.txt` from the backend folder:
    ```bash
-   pip install -r backend/requirements.txt
+   pip install tf-keras --upgrade
+   pip install flask-cors torch
+               or
+   pip install -r requirements.txt
+   
    ```
 
 3. Run the Flask backend:
    ```bash
-   python backend/app.py
+   python app.py
    ```
 
 ### 3. Frontend Setup
@@ -90,20 +94,4 @@ Visit the app at `http://localhost:5173`.
 
 ---
 
-## License
 
-This project is licensed under the MIT License. See the `LICENSE` file for details.
-
----
-
-## Support
-
-If you find this project helpful, consider supporting me on Ko-fi:  
-[ko-fi.com/allanninal](https://ko-fi.com/allanninal)
-
----
-
-## Explore More Projects
-
-For more exciting projects, check out my list of **AI Mini Projects**:  
-[Mini AI Projects GitHub List](https://github.com/stars/allanninal/lists/mini-ai-projects)
