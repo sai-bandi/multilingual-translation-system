@@ -27,7 +27,9 @@ config = Config()
 
 # Initialize Flask app
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})  # Allow all web browsers to access endpoints
+
+# FIX: Allow all web browser origins to access the endpoints cleanly without CORS blocks
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 # Initialize rate limiter
 limiter = Limiter(
@@ -36,12 +38,31 @@ limiter = Limiter(
     default_limits=["100 per day", "10 per minute"]  # Default rate limits
 )
 
-# Cache for translation models
-@lru_cache(maxsize=5)
-# Replace your get_translator and translate sections with this:
+def validate_input(text: str, source_language: str, target_language: str) -> Optional[Dict]:
+    """
+    Validate input parameters for the translation request.
+    
+    Args:
+        text (str): Text to be translated.
+        source_language (str): Source language code.
+        target_language (str): Target language code.
+    
+    Returns:
+        Optional[Dict]: Error message and status code if validation fails, otherwise None.
+    """
+    if not text:
+        return {"error": "No text provided"}, 400
+    if len(text) > config.MAX_TEXT_LENGTH:
+        return {"error": f"Text exceeds maximum length of {config.MAX_TEXT_LENGTH}"}, 400
+    if source_language == target_language:
+        return {"error": "Source and target languages must be different"}, 400
+    return None
 
 def get_translation_result(text: str, source_lang: str, target_lang: str) -> str:
-    """Loads the pipeline, translates immediately, and frees memory right after."""
+    """
+    Loads the pipeline on demand, processes the translation immediately, 
+    and drops the variables to free up RAM on Render's Free Tier (512MB).
+    """
     language_models = {
         ("en", "es"): "Helsinki-NLP/opus-mt-en-es",
         ("en", "fr"): "Helsinki-NLP/opus-mt-en-fr",
@@ -51,38 +72,45 @@ def get_translation_result(text: str, source_lang: str, target_lang: str) -> str
     }
 
     model_name = language_models.get((source_lang, target_lang))
+
     if not model_name:
-        raise ValueError(f"Unsupported language pair: {source_lang}-{target_lang}")
+        raise ValueError(
+            f"Unsupported language pair: {source_lang}-{target_lang}"
+        )
 
     logger.info(f"Loading model on-demand: {model_name}")
-    
-    # Initialize pipeline locally so it can be garbage collected
+
+    # Load pipeline context locally inside the function block
     translator_pipeline = pipeline("translation", model=model_name)
-    result = translator_pipeline(text, max_length=400)
-    translated_text = result[0]['translation_text']
-    
-    # Clean up memory explicitly to prevent Render Free Tier crashes
+    translation_result = translator_pipeline(text, max_length=400)
+    translated_text = translation_result[0]['translation_text']
+
+    # Explicit memory cleanup to prevent "Out Of Memory" backend terminations
     del translator_pipeline
     import gc
     gc.collect()
-    
+
     return translated_text
 
 @app.route('/translate', methods=['POST'])
-@limiter.limit("10 per minute")
+@limiter.limit("10 per minute")  # Apply rate limiting to this endpoint
 def translate():
+    """
+    Handle translation requests.
+    Expects a JSON payload with 'text', 'source_language', and 'target_language'.
+    """
     try:
         request_data = request.json
         input_text = request_data.get("text", "")
         source_language = request_data.get("source_language", config.DEFAULT_SOURCE_LANG)
         target_language = request_data.get("target_language", config.DEFAULT_TARGET_LANG)
 
-        # Validate input
+        # Validate input (Now fully restored!)
         validation_error = validate_input(input_text, source_language, target_language)
         if validation_error:
             return jsonify(validation_error[0]), validation_error[1]
 
-        # Translate and immediately flush RAM
+        # Execute on-demand memory safe translation
         translated_text = get_translation_result(input_text, source_language, target_language)
 
         logger.info(f"Successfully translated text from {source_language} to {target_language}")
