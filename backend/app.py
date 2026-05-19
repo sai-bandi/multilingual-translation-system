@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from transformers import pipeline
 import multiprocessing
+import os
 from typing import Dict, Optional
 from functools import lru_cache
 import logging
@@ -128,4 +129,9 @@ def translate():
 
 if __name__ == '__main__':
     multiprocessing.freeze_support()  # Support for Windows multiprocessing
-    app.run(host='127.0.0.1', port=5000, debug=False, use_reloader=False)  # Disable debugger reloader on Windows
+    
+    # Grab Render's dynamic port environment variable, or fall back to 5000 locally
+    port = int(os.environ.get("PORT", 5000))
+    
+    # Binding to '0.0.0.0' exposes the app onto the public cloud network interface
+    app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
