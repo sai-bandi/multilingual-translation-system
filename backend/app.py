@@ -3,13 +3,8 @@ from flask_cors import CORS
 import requests
 import os
 import multiprocessing
-import logging
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-# Allow cross-origin requests from Vercel cleanly
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 @app.route('/translate', methods=['POST'])
@@ -22,23 +17,24 @@ def translate():
         
         if not text.strip():
             return jsonify({"error": "No text provided"}), 400
-            
-        if src == tgt:
-            return jsonify({"error": "Source and target languages must be different"}), 400
 
         model_name = f"Helsinki-NLP/opus-mt-{src}-{tgt}"
-        # Connect directly to Hugging Face cloud servers (0% RAM impact on Render!)
         api_url = f"https://api-inference.huggingface.co/models/{model_name}"
         
-        logger.info(f"Routing request to Hugging Face API Serverless Interface: {model_name}")
-        response = requests.post(api_url, json={"inputs": text})
+        # FORCES cloud engine to wait until warm instead of dropping timeout!
+        payload = {
+            "inputs": text,
+            "options": {"wait_for_model": True} 
+        }
         
-        if response.status_code != 200:
-            return jsonify({"error": "Cloud model engine warming up. Click translate again in 5 seconds."}), 500
-            
+        response = requests.post(api_url, json=payload)
         result = response.json()
-        translated_text = result[0]['translation_text']
         
+        if isinstance(result, list) and len(result) > 0 and 'translation_text' in result[0]:
+            translated_text = result[0]['translation_text']
+        else:
+            translated_text = "Model loading infrastructure processing setup. Click translate again."
+
         return jsonify({
             "translated_text": translated_text, 
             "source_language": src, 
@@ -46,8 +42,7 @@ def translate():
         })
         
     except Exception as e:
-        logger.error(f"API Connection Error: {str(e)}")
-        return jsonify({"error": "Translation delay. Please try again."}), 500
+        return jsonify({"error": "Translation cluster delay. Please try again."}), 500
 
 if __name__ == '__main__':
     multiprocessing.freeze_support()
