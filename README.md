@@ -30,8 +30,8 @@ The Multilingual Translator leverages Hugging Face’s **Helsinki-NLP/opus-mt** 
 
 ### 1. Clone the Repository
 ```bash
-git clone git@github.com:allanninal/multilingual-translator.git
-cd multilingual-translator
+git clone https://github.com/sai-bandi/multilingual-translation-system.git
+cd multilingual-translation-system
 ```
 
 ### 2. Backend Setup
